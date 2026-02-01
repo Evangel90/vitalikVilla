@@ -46,7 +46,7 @@ export default function App() {
   });
 
   React.useEffect(() => {
-    const timer = setInterval(() => setNow(new Date()), 60_000);
+    const timer = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
 
@@ -175,9 +175,6 @@ export default function App() {
                   </p>
                 </div>
                 <div className="text-right">
-                  <p className="text-xs uppercase tracking-wide text-green-300/70">
-                    Countdown
-                  </p>
                   <p className="text-lg font-semibold text-green-200">
                     {formatCountdown(nextDuty.date, now)}
                   </p>
@@ -283,6 +280,7 @@ export default function App() {
             weeks={filteredWeeks}
             cleanedDates={cleanedDates}
             onToggleCleaned={onToggleCleaned}
+            now={now}
           />
         )}
       </PageContainer>

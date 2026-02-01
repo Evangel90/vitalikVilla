@@ -12,9 +12,15 @@ type RosterGridProps = {
   >;
   cleanedDates: Set<string>;
   onToggleCleaned: (date: Date) => void;
+  now: Date;
 };
 
-export const RosterGrid = ({ weeks, cleanedDates, onToggleCleaned }: RosterGridProps) => {
+export const RosterGrid = ({
+  weeks,
+  cleanedDates,
+  onToggleCleaned,
+  now,
+}: RosterGridProps) => {
   const todayRef = React.useRef<HTMLDivElement | null>(null);
   const today = new Date();
 
@@ -49,6 +55,7 @@ export const RosterGrid = ({ weeks, cleanedDates, onToggleCleaned }: RosterGridP
                     active={isToday}
                     cleaned={cleanedDates.has(dateKey)}
                     onToggleCleaned={onToggleCleaned}
+                    now={now}
                   />
                 </div>
               );
