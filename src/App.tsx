@@ -40,10 +40,10 @@ export default function App() {
   return (
     <main
       className="
-    min-h-screen
-    bg-gray-950
-    text-gray-100
-  "
+        min-h-screen
+        bg-[#0f1a14]
+        text-[#e6f2ea]
+      "
     >
       <PageContainer>
         <Header />
