@@ -1,4 +1,5 @@
 import { RosterCard } from "./RosterCard";
+import { useState } from 'react';
 
 export const RosterGrid = () => {
   const players = Array.from({ length: 12 }).map((_, i) => ({
@@ -7,6 +8,7 @@ export const RosterGrid = () => {
     role: "Forward",
     team: "Team Alpha",
   }));
+  const [activeId, setActiveId] = useState<number | null>(null);
 
   return (
     <section
@@ -21,7 +23,12 @@ export const RosterGrid = () => {
       "
     >
       {players.map((player) => (
-        <RosterCard key={player.id} {...player} />
+        <RosterCard
+          key={player.id}
+          {...player}
+          active={activeId === player.id}
+          onClick={() => setActiveId(player.id)}
+        />
       ))}
     </section>
   );
