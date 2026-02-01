@@ -1,18 +1,15 @@
+import "./App.css";
+import { PageContainer } from "./components/PageContainer";
+import { Header } from "./components/Header";
+import { RosterGrid } from "./components/RosterGrid";
 
-import './App.css'
-
-function App() {
-
-
+export default function App() {
   return (
-    <>
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center bg-blue-500 p-20">
-          <h1 className='text-2xl px-8'>Vitalik Villa Roaster</h1>
-        </div>
-      </div>
-    </>
-  )
+    <main className="min-h-screen bg-gray-50 text-gray-900">
+      <PageContainer>
+        <Header />
+        <RosterGrid/>
+      </PageContainer>
+    </main>
+  );
 }
-
-export default App
