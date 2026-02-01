@@ -5,10 +5,16 @@ import { RosterGrid } from "./components/RosterGrid";
 
 export default function App() {
   return (
-    <main className="min-h-screen bg-gray-50 text-gray-900">
+    <main className="
+      min-h-screen
+      bg-gray-50
+      text-gray-900
+      dark:bg-gray-950
+      dark:text-gray-100
+    ">
       <PageContainer>
         <Header />
-        <RosterGrid/>
+        <RosterGrid />
       </PageContainer>
     </main>
   );

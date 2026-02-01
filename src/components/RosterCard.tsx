@@ -16,6 +16,8 @@ export const RosterCard = ({ name, role, team, active, onClick }: CardProps) => 
         rounded-xl
         border
         bg-white
+        dark:bg-gray-900
+
         p-4
         sm:p-5
 
@@ -25,15 +27,20 @@ export const RosterCard = ({ name, role, team, active, onClick }: CardProps) => 
         cursor-pointer
 
         ${active
-          ? "border-gray-900 shadow-lg"
-          : "border-gray-200 hover:-translate-y-0.5 hover:shadow-lg hover:border-gray-300"
+          ? "border-blue-500 shadow-lg"
+          : "border-gray-200 dark:border-gray-800 hover:-translate-y-0.5 hover:shadow-lg"
+
         }
 
         focus:outline-none
         focus:ring-2
-        focus:ring-gray-900
+        focus:ring-blue-500
+        dark:focus:ring-blue-400
         focus:ring-offset-2
+        dark:focus:ring-offset-gray-950
+
       `}
+
     >
       <div className="flex items-center gap-3">
         <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-gray-200" />

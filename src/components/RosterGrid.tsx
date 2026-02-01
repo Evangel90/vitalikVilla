@@ -1,5 +1,6 @@
 import { RosterCard } from "./RosterCard";
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { SkeletonCard } from "./SkeletonCard";
 
 export const RosterGrid = () => {
   const players = Array.from({ length: 12 }).map((_, i) => ({
@@ -9,6 +10,12 @@ export const RosterGrid = () => {
     team: "Team Alpha",
   }));
   const [activeId, setActiveId] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const t = setTimeout(() => setLoading(false), 1200);
+    return () => clearTimeout(t);
+  }, []);
 
   return (
     <section
@@ -22,14 +29,18 @@ export const RosterGrid = () => {
         sm:gap-6
       "
     >
-      {players.map((player) => (
-        <RosterCard
-          key={player.id}
-          {...player}
-          active={activeId === player.id}
-          onClick={() => setActiveId(player.id)}
-        />
-      ))}
+      {loading
+        ? Array.from({ length: 8 }).map((_, i) => (
+          <SkeletonCard key={i} />
+        ))
+        : players.map((player) => (
+          <RosterCard
+            key={player.id}
+            {...player}
+            active={activeId === player.id}
+            onClick={() => setActiveId(player.id)}
+          />
+        ))}
     </section>
   );
 }
