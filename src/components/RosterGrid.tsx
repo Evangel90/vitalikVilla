@@ -1,21 +1,24 @@
 import { RosterCard } from "./RosterCard";
-import { useState, useEffect } from 'react';
-import { SkeletonCard } from "./SkeletonCard";
+// import { useState, useEffect } from 'react';
+// import { SkeletonCard } from "./SkeletonCard";
+import {roster, isSameDay} from '../App';
 
 export const RosterGrid = () => {
-  const players = Array.from({ length: 12 }).map((_, i) => ({
-    id: i,
-    name: `Player ${i + 1}`,
-    role: "Forward",
-    team: "Team Alpha",
-  }));
-  const [activeId, setActiveId] = useState<number | null>(null);
-  const [loading, setLoading] = useState(true);
+  // const players = Array.from({ length: 12 }).map((_, i) => ({
+  //   id: i,
+  //   name: `Player ${i + 1}`,
+  //   role: "Forward",
+  //   team: "Team Alpha",
+  // }));
+  // const [activeId, setActiveId] = useState<number | null>(null);
+  // const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const t = setTimeout(() => setLoading(false), 1200);
-    return () => clearTimeout(t);
-  }, []);
+  // useEffect(() => {
+  //   const t = setTimeout(() => setLoading(false), 1200);
+  //   return () => clearTimeout(t);
+  // }, []);
+
+  const today = new Date();
 
   return (
     <section
@@ -29,18 +32,15 @@ export const RosterGrid = () => {
         sm:gap-6
       "
     >
-      {loading
-        ? Array.from({ length: 8 }).map((_, i) => (
-          <SkeletonCard key={i} />
-        ))
-        : players.map((player) => (
-          <RosterCard
-            key={player.id}
-            {...player}
-            active={activeId === player.id}
-            onClick={() => setActiveId(player.id)}
-          />
-        ))}
+      {roster.map((entry) => (
+        <RosterCard
+          key={entry.id}
+          name={entry.name}
+          role={entry.role}
+          date={entry.date}
+          active={isSameDay(entry.date, today)}
+        />
+      ))}
     </section>
   );
 }
