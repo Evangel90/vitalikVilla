@@ -3,7 +3,7 @@ const VALIDATORS = [
     { name: "Adams Afeez", email: "adamsafeez4@gmail.com" },
     { name: "Oladipo Evangel", email: "oladipoevangel90@gmail.com" },
     { name: "Akinwamide Bukummi", email: "bukunmiabiodun14@gmail.com" },
-    { name: "Sunday Justice", email: "Onyekaozuru122@gmail.com" },
+    { name: "Sunday Justice", email: "onyekaozuru122@gmail.com" },
 ];
 
 const PEOPLE = VALIDATORS.map((validator) => validator.name);
