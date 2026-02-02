@@ -56,14 +56,15 @@ export default function App() {
       setAuthReady(true);
       return;
     }
+    const client = supabase;
     let isMounted = true;
-    supabase.auth.getSession().then(({ data }) => {
+    client.auth.getSession().then(({ data }) => {
       if (!isMounted) return;
       const email = data.session?.user?.email ?? null;
       setCurrentUser(email ? { email } : null);
       setAuthReady(true);
     });
-    const { data: authListener } = supabase.auth.onAuthStateChange(
+    const { data: authListener } = client.auth.onAuthStateChange(
       (_event, session) => {
         const email = session?.user?.email ?? null;
         setCurrentUser(email ? { email } : null);
@@ -78,7 +79,8 @@ export default function App() {
 
   const loadConfirmations = React.useCallback(async () => {
     if (!supabase) return;
-    const { data, error } = await supabase
+    const client = supabase;
+    const { data, error } = await client
       .from("confirmations")
       .select("date, validators");
     if (error) return;
@@ -93,8 +95,9 @@ export default function App() {
 
   React.useEffect(() => {
     if (!supabase) return;
+    const client = supabase;
     void loadConfirmations();
-    const channel = supabase
+    const channel = client
       .channel("confirmations")
       .on(
         "postgres_changes",
@@ -105,7 +108,7 @@ export default function App() {
       )
       .subscribe();
     return () => {
-      void supabase.removeChannel(channel);
+      void client.removeChannel(channel);
     };
   }, [loadConfirmations]);
 
@@ -199,8 +202,9 @@ export default function App() {
       if (!supabase) {
         return { ok: false, message: "Supabase is not configured yet." };
       }
+      const client = supabase;
       try {
-        const { data, error } = await supabase
+        const { data, error } = await client
           .from("confirmations")
           .select("validators")
           .eq("date", key)
@@ -211,7 +215,7 @@ export default function App() {
           return { ok: true };
         }
         const next = [...existing, currentValidator.email];
-        const { error: upsertError } = await supabase
+        const { error: upsertError } = await client
           .from("confirmations")
           .upsert(
             {
@@ -238,9 +242,10 @@ export default function App() {
       if (!supabase) {
         return { ok: false, message: "Supabase is not configured yet." };
       }
+      const client = supabase;
       try {
         const key = getDateKey(date);
-        const { data, error } = await supabase
+        const { data, error } = await client
           .from("confirmations")
           .select("validators")
           .eq("date", key)
@@ -253,7 +258,7 @@ export default function App() {
         const next = existing.filter(
           (email: string) => email !== currentValidator.email
         );
-        const { error: upsertError } = await supabase
+        const { error: upsertError } = await client
           .from("confirmations")
           .upsert(
             {
@@ -304,10 +309,12 @@ export default function App() {
       setIsSigningIn(true);
       if (!supabase) {
         setAuthError("Supabase is not configured yet.");
+        setIsSigningIn(false);
         return;
       }
+      const client = supabase;
       try {
-        const { error } = await supabase.auth.signInWithPassword({
+        const { error } = await client.auth.signInWithPassword({
           email: userEmail,
           password: userPassword,
         });
@@ -324,7 +331,8 @@ export default function App() {
 
   const onSignOut = React.useCallback(async () => {
     if (!supabase) return;
-    await supabase.auth.signOut();
+    const client = supabase;
+    await client.auth.signOut();
   }, []);
 
   return (
