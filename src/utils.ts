@@ -1,9 +1,9 @@
 const VALIDATORS = [
-    { name: "Olojede Jahnifemi", email: "olojede@example.com" },
-    { name: "Adams Afeez", email: "adams@example.com" },
+    { name: "Olojede Jahnifemi", email: "dolaponifemi941@gmail.com" },
+    { name: "Adams Afeez", email: "adamsafeez4@gmail.com" },
     { name: "Oladipo Evangel", email: "oladipoevangel90@gmail.com" },
     { name: "Akinwamide Bukummi", email: "bukunmiabiodun14@gmail.com" },
-    { name: "Sunday Justice", email: "sunday@example.com" },
+    { name: "Sunday Justice", email: "Onyekaozuru122@gmail.com" },
 ];
 
 const PEOPLE = VALIDATORS.map((validator) => validator.name);
