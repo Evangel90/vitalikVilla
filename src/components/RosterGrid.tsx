@@ -11,15 +11,25 @@ type RosterGridProps = {
     }>
   >;
   cleanedDates: Set<string>;
-  onToggleCleaned: (date: Date) => void;
   now: Date;
+  confirmations: Record<string, string[]>;
+  minConfirmations: number;
+  validatorNameByEmail: Record<string, string>;
+  currentValidator: { name: string; email: string } | null;
+  onConfirm: (date: Date) => Promise<{ ok: boolean; message?: string }>;
+  onRemoveConfirmation: (date: Date) => Promise<{ ok: boolean; message?: string }>;
 };
 
 export const RosterGrid = ({
   weeks,
   cleanedDates,
-  onToggleCleaned,
   now,
+  confirmations,
+  minConfirmations,
+  validatorNameByEmail,
+  currentValidator,
+  onConfirm,
+  onRemoveConfirmation,
 }: RosterGridProps) => {
   const todayRef = React.useRef<HTMLDivElement | null>(null);
   const today = new Date();
@@ -43,6 +53,7 @@ export const RosterGrid = ({
             {week.map((entry) => {
               const isToday = isSameDay(entry.date, today);
               const dateKey = getDateKey(entry.date);
+              const confirmedBy = confirmations[dateKey] ?? [];
 
               return (
                 <div
@@ -54,8 +65,13 @@ export const RosterGrid = ({
                     {...entry}
                     active={isToday}
                     cleaned={cleanedDates.has(dateKey)}
-                    onToggleCleaned={onToggleCleaned}
                     now={now}
+                    confirmations={confirmedBy}
+                    minConfirmations={minConfirmations}
+                    validatorNameByEmail={validatorNameByEmail}
+                    currentValidator={currentValidator}
+                    onConfirm={onConfirm}
+                    onRemoveConfirmation={onRemoveConfirmation}
                   />
                 </div>
               );

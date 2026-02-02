@@ -1,10 +1,12 @@
-const PEOPLE = [
-    "Olojede Jahnifemi",
-    "Adams Afeez",
-    "Oladipo Evangel",
-    "Akinwamide Bukummi",
-    "Sunday Justice",
+const VALIDATORS = [
+    { name: "Olojede Jahnifemi", email: "olojede@example.com" },
+    { name: "Adams Afeez", email: "adams@example.com" },
+    { name: "Oladipo Evangel", email: "oladipoevangel90@gmail.com" },
+    { name: "Akinwamide Bukummi", email: "bukunmiabiodun14@gmail.com" },
+    { name: "Sunday Justice", email: "sunday@example.com" },
 ];
+
+const PEOPLE = VALIDATORS.map((validator) => validator.name);
 
 function isSameDay(a: Date, b: Date) {
     return (
@@ -70,7 +72,7 @@ function groupByWeek(entries: typeof schedule) {
         const weekKey = entry.date.toLocaleDateString(undefined, {
             year: "numeric",
             week: "numeric",
-        } as any);
+        } as Intl.DateTimeFormatOptions);
 
         if (!weekMap.has(weekKey)) {
             weekMap.set(weekKey, []);
@@ -83,4 +85,4 @@ function groupByWeek(entries: typeof schedule) {
 
 const weeks = groupByWeek(schedule);
 
-export { isSameDay, daysFromToday, getDateKey, schedule, weeks, groupByWeek };
+export { isSameDay, daysFromToday, getDateKey, schedule, weeks, groupByWeek, PEOPLE, VALIDATORS };

@@ -2,10 +2,11 @@ import "./App.css";
 import { PageContainer } from "./components/PageContainer";
 import { Header } from "./components/Header";
 import { RosterGrid } from "./components/RosterGrid";
-import { getDateKey, groupByWeek, schedule } from "./utils";
+import { getDateKey, groupByWeek, schedule, PEOPLE, VALIDATORS } from "./utils";
 import React from "react";
+import { supabase } from "./supabase";
 
-const CLEANED_STORAGE_KEY = "vitalikvilla.cleaned";
+const MIN_CONFIRMATIONS = 3;
 
 const getTodayStart = () => {
   const today = new Date();
@@ -35,15 +36,15 @@ export default function App() {
   const [next7Only, setNext7Only] = React.useState(false);
   const [now, setNow] = React.useState(new Date());
 
-  const [cleanedDates, setCleanedDates] = React.useState<Set<string>>(() => {
-    try {
-      const stored = localStorage.getItem(CLEANED_STORAGE_KEY);
-      if (!stored) return new Set();
-      return new Set(JSON.parse(stored));
-    } catch {
-      return new Set();
-    }
-  });
+  const [confirmations, setConfirmations] = React.useState<Record<string, string[]>>({});
+  const [userEmail, setUserEmail] = React.useState("");
+  const [userPassword, setUserPassword] = React.useState("");
+  const [authError, setAuthError] = React.useState("");
+  const [authReady, setAuthReady] = React.useState(false);
+  const [isSigningIn, setIsSigningIn] = React.useState(false);
+  const [currentUser, setCurrentUser] = React.useState<{
+    email: string;
+  } | null>(null);
 
   React.useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 1000);
@@ -51,19 +52,84 @@ export default function App() {
   }, []);
 
   React.useEffect(() => {
-    const payload = JSON.stringify(Array.from(cleanedDates));
-    localStorage.setItem(CLEANED_STORAGE_KEY, payload);
-  }, [cleanedDates]);
+    if (!supabase) {
+      setAuthReady(true);
+      return;
+    }
+    let isMounted = true;
+    supabase.auth.getSession().then(({ data }) => {
+      if (!isMounted) return;
+      const email = data.session?.user?.email ?? null;
+      setCurrentUser(email ? { email } : null);
+      setAuthReady(true);
+    });
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        const email = session?.user?.email ?? null;
+        setCurrentUser(email ? { email } : null);
+        setAuthReady(true);
+      }
+    );
+    return () => {
+      isMounted = false;
+      authListener.subscription.unsubscribe();
+    };
+  }, []);
 
-  const people = React.useMemo(() => {
-    const names: string[] = [];
-    schedule.forEach((entry) => {
-      if (!entry.free && !names.includes(entry.name)) {
-        names.push(entry.name);
+  const loadConfirmations = React.useCallback(async () => {
+    if (!supabase) return;
+    const { data, error } = await supabase
+      .from("confirmations")
+      .select("date, validators");
+    if (error) return;
+    const next: Record<string, string[]> = {};
+    data?.forEach((row) => {
+      if (Array.isArray(row.validators)) {
+        next[row.date] = row.validators as string[];
       }
     });
-    return names;
+    setConfirmations(next);
   }, []);
+
+  React.useEffect(() => {
+    if (!supabase) return;
+    void loadConfirmations();
+    const channel = supabase
+      .channel("confirmations")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "confirmations" },
+        () => {
+          void loadConfirmations();
+        }
+      )
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [loadConfirmations]);
+
+  const people = React.useMemo(() => {
+    return PEOPLE.slice();
+  }, []);
+
+  const validatorNameByEmail = React.useMemo(() => {
+    const map: Record<string, string> = {};
+    VALIDATORS.forEach((validator) => {
+      map[validator.email] = validator.name;
+    });
+    return map;
+  }, []);
+
+  const currentValidator = React.useMemo(() => {
+    if (!currentUser?.email) return null;
+    const name = validatorNameByEmail[currentUser.email];
+    if (!name) return null;
+    return { name, email: currentUser.email };
+  }, [currentUser, validatorNameByEmail]);
+
+  const isUnauthorized =
+    currentUser?.email && !validatorNameByEmail[currentUser.email];
 
   const allWeeks = React.useMemo(() => groupByWeek(schedule), []);
   const weekRanges = React.useMemo(
@@ -116,18 +182,105 @@ export default function App() {
     return schedule.find((entry) => !entry.free && entry.date >= today);
   }, [now]);
 
-  const onToggleCleaned = React.useCallback((date: Date) => {
-    const key = getDateKey(date);
-    setCleanedDates((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) {
-        next.delete(key);
-      } else {
-        next.add(key);
+  const todayKey = React.useMemo(() => getDateKey(getTodayStart()), [now]);
+  const todayConfirmations = confirmations[todayKey] ?? [];
+  const todayValidated = todayConfirmations.length >= MIN_CONFIRMATIONS;
+
+  const onConfirm = React.useCallback(
+    async (date: Date) => {
+      if (!currentValidator) {
+        return { ok: false, message: "Sign in with a validator account." };
       }
-      return next;
+      const key = getDateKey(date);
+      const dutyEntry = schedule.find((entry) => getDateKey(entry.date) === key);
+      if (dutyEntry && !dutyEntry.free && dutyEntry.name === currentValidator.name) {
+        return { ok: false, message: "On-duty person cannot confirm their own cleaning." };
+      }
+      if (!supabase) {
+        return { ok: false, message: "Supabase is not configured yet." };
+      }
+      try {
+        const { data, error } = await supabase
+          .from("confirmations")
+          .select("validators")
+          .eq("date", key)
+          .maybeSingle();
+        if (error) throw error;
+        const existing = Array.isArray(data?.validators) ? data?.validators : [];
+        if (existing.includes(currentValidator.email)) {
+          return { ok: true };
+        }
+        const next = [...existing, currentValidator.email];
+        const { error: upsertError } = await supabase
+          .from("confirmations")
+          .upsert(
+            {
+              date: key,
+              validators: next,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: "date" }
+          );
+        if (upsertError) throw upsertError;
+        return { ok: true };
+      } catch {
+        return { ok: false, message: "Unable to confirm right now." };
+      }
+    },
+    [currentValidator]
+  );
+
+  const onRemoveConfirmation = React.useCallback(
+    async (date: Date) => {
+      if (!currentValidator) {
+        return { ok: false, message: "Sign in with a validator account." };
+      }
+      if (!supabase) {
+        return { ok: false, message: "Supabase is not configured yet." };
+      }
+      try {
+        const key = getDateKey(date);
+        const { data, error } = await supabase
+          .from("confirmations")
+          .select("validators")
+          .eq("date", key)
+          .maybeSingle();
+        if (error) throw error;
+        const existing = Array.isArray(data?.validators) ? data?.validators : [];
+        if (!existing.includes(currentValidator.email)) {
+          return { ok: true };
+        }
+        const next = existing.filter(
+          (email: string) => email !== currentValidator.email
+        );
+        const { error: upsertError } = await supabase
+          .from("confirmations")
+          .upsert(
+            {
+              date: key,
+              validators: next,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: "date" }
+          );
+        if (upsertError) throw upsertError;
+        return { ok: true };
+      } catch {
+        return { ok: false, message: "Unable to remove right now." };
+      }
+    },
+    [currentValidator]
+  );
+
+  const cleanedDates = React.useMemo(() => {
+    const cleaned = new Set<string>();
+    Object.entries(confirmations).forEach(([key, list]) => {
+      if (list.length >= MIN_CONFIRMATIONS) {
+        cleaned.add(key);
+      }
     });
-  }, []);
+    return cleaned;
+  }, [confirmations]);
 
   const onJumpToNext = React.useCallback(() => {
     if (!nextDuty) return;
@@ -142,6 +295,36 @@ export default function App() {
     setPersonFilter("All");
     setWeekFilter("all");
     setNext7Only(false);
+  }, []);
+
+  const onSignIn = React.useCallback(
+    async (event: React.FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      setAuthError("");
+      setIsSigningIn(true);
+      if (!supabase) {
+        setAuthError("Supabase is not configured yet.");
+        return;
+      }
+      try {
+        const { error } = await supabase.auth.signInWithPassword({
+          email: userEmail,
+          password: userPassword,
+        });
+        if (error) throw error;
+        setUserPassword("");
+      } catch {
+        setAuthError("Sign-in failed. Check email and password.");
+      } finally {
+        setIsSigningIn(false);
+      }
+    },
+    [userEmail, userPassword]
+  );
+
+  const onSignOut = React.useCallback(async () => {
+    if (!supabase) return;
+    await supabase.auth.signOut();
   }, []);
 
   return (
@@ -173,6 +356,16 @@ export default function App() {
                       day: "numeric",
                     })}
                   </p>
+                  {getDateKey(nextDuty.date) === todayKey && (
+                    <div className="mt-2 flex items-center gap-2 text-[11px] uppercase tracking-wide text-green-200/70">
+                      <span>Today</span>
+                      {todayValidated && (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-green-400/50 bg-green-500/10 px-2 py-0.5 text-[10px] text-green-100">
+                          ✓ Validated
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <div className="text-right">
                   <p className="text-lg font-semibold text-green-200">
@@ -209,64 +402,143 @@ export default function App() {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-green-900/60 bg-[#111c16] p-5">
-            <p className="text-xs uppercase tracking-wide text-green-300/70">
-              Filters
-            </p>
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <label className="text-xs text-green-200/70">
-                Person
-                <select
-                  className="mt-2 w-full rounded-lg border border-green-900/70 bg-[#0f1a14] px-3 py-2 text-sm text-green-100"
-                  value={personFilter}
-                  onChange={(event) => setPersonFilter(event.target.value)}
-                >
-                  <option value="All">All</option>
-                  {people.map((name) => (
-                    <option key={name} value={name}>
-                      {name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="text-xs text-green-200/70">
-                Week
-                <select
-                  className="mt-2 w-full rounded-lg border border-green-900/70 bg-[#0f1a14] px-3 py-2 text-sm text-green-100"
-                  value={weekFilter}
-                  onChange={(event) => {
-                    const value = event.target.value;
-                    setWeekFilter(value === "all" ? "all" : Number(value));
-                  }}
-                >
-                  <option value="all">All weeks</option>
-                  {weekRanges.map((week) => (
-                    <option key={week.index} value={week.index}>
-                      Week {week.index + 1}
-                    </option>
-                  ))}
-                </select>
-              </label>
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-green-900/60 bg-[#111c16] p-5">
+              <p className="text-xs uppercase tracking-wide text-green-300/70">
+                Validator Access
+              </p>
+              <div className="mt-4">
+                {!supabase ? (
+                  <div className="space-y-2 text-xs text-green-200/70">
+                    <p>Supabase is not configured yet.</p>
+                    <p>Add your keys to <span className="text-green-100">.env</span> and restart the dev server.</p>
+                  </div>
+                ) : authReady ? (
+                  currentUser ? (
+                    <div className="space-y-3 text-sm text-green-200/80">
+                      <div>
+                        Signed in as{" "}
+                        <span className="font-semibold text-green-100">
+                          {currentUser.email}
+                        </span>
+                      </div>
+                      {currentValidator ? (
+                        <div className="text-[11px] text-green-200/60">
+                          Validator: {currentValidator.name}
+                        </div>
+                      ) : (
+                        <div className="text-[11px] text-red-300/80">
+                          This email is not on the validator list.
+                        </div>
+                      )}
+                      <button
+                        type="button"
+                        onClick={onSignOut}
+                        className="rounded-full border border-green-900/60 px-3 py-1 text-[10px] uppercase tracking-wide text-green-200 hover:border-green-700/80"
+                      >
+                        Sign out
+                      </button>
+                    </div>
+                  ) : (
+                    <form onSubmit={onSignIn} className="space-y-3">
+                      <input
+                        type="email"
+                        value={userEmail}
+                        onChange={(event) => setUserEmail(event.target.value)}
+                        placeholder="Email"
+                        className="w-full rounded-lg border border-green-900/70 bg-[#0f1a14] px-3 py-2 text-sm text-green-100"
+                        required
+                      />
+                      <input
+                        type="password"
+                        value={userPassword}
+                        onChange={(event) => setUserPassword(event.target.value)}
+                        placeholder="Password"
+                        className="w-full rounded-lg border border-green-900/70 bg-[#0f1a14] px-3 py-2 text-sm text-green-100"
+                        required
+                      />
+                      {authError && (
+                        <p className="text-xs text-red-300/80">{authError}</p>
+                      )}
+                      <button
+                        type="submit"
+                        disabled={isSigningIn}
+                        className="w-full rounded-full border border-green-400/50 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-green-100 transition hover:border-green-300/80 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {isSigningIn ? "Signing in..." : "Sign in"}
+                      </button>
+                    </form>
+                  )
+                ) : (
+                  <p className="text-xs text-green-200/70">Loading auth...</p>
+                )}
+                {isUnauthorized && (
+                  <p className="mt-2 text-[11px] text-red-300/80">
+                    Update the validator email list in `src/utils.ts`.
+                  </p>
+                )}
+              </div>
             </div>
 
-            <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-green-200/70">
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={next7Only}
-                  onChange={(event) => setNext7Only(event.target.checked)}
-                  className="h-4 w-4 rounded border-green-700 bg-[#0f1a14]"
-                />
-                Next 7 days only
-              </label>
-              <button
-                type="button"
-                onClick={resetFilters}
-                className="rounded-full border border-green-900/60 px-3 py-1 text-[10px] uppercase tracking-wide text-green-200 hover:border-green-700/80"
-              >
-                Reset
-              </button>
+            <div className="rounded-2xl border border-green-900/60 bg-[#111c16] p-5">
+              <p className="text-xs uppercase tracking-wide text-green-300/70">
+                Filters
+              </p>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <label className="text-xs text-green-200/70">
+                  Person
+                  <select
+                    className="mt-2 w-full rounded-lg border border-green-900/70 bg-[#0f1a14] px-3 py-2 text-sm text-green-100"
+                    value={personFilter}
+                    onChange={(event) => setPersonFilter(event.target.value)}
+                  >
+                    <option value="All">All</option>
+                    {people.map((name) => (
+                      <option key={name} value={name}>
+                        {name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="text-xs text-green-200/70">
+                  Week
+                  <select
+                    className="mt-2 w-full rounded-lg border border-green-900/70 bg-[#0f1a14] px-3 py-2 text-sm text-green-100"
+                    value={weekFilter}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      setWeekFilter(value === "all" ? "all" : Number(value));
+                    }}
+                  >
+                    <option value="all">All weeks</option>
+                    {weekRanges.map((week) => (
+                      <option key={week.index} value={week.index}>
+                        Week {week.index + 1}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+              <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-green-200/70">
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={next7Only}
+                    onChange={(event) => setNext7Only(event.target.checked)}
+                    className="h-4 w-4 rounded border-green-700 bg-[#0f1a14]"
+                  />
+                  Next 7 days only
+                </label>
+                <button
+                  type="button"
+                  onClick={resetFilters}
+                  className="rounded-full border border-green-900/60 px-3 py-1 text-[10px] uppercase tracking-wide text-green-200 hover:border-green-700/80"
+                >
+                  Reset
+                </button>
+              </div>
             </div>
           </div>
         </section>
@@ -279,8 +551,13 @@ export default function App() {
           <RosterGrid
             weeks={filteredWeeks}
             cleanedDates={cleanedDates}
-            onToggleCleaned={onToggleCleaned}
             now={now}
+            confirmations={confirmations}
+            minConfirmations={MIN_CONFIRMATIONS}
+            validatorNameByEmail={validatorNameByEmail}
+            currentValidator={currentValidator}
+            onConfirm={onConfirm}
+            onRemoveConfirmation={onRemoveConfirmation}
           />
         )}
       </PageContainer>
